@@ -1,4 +1,8 @@
+/* eslint-env jest */
 // Jest 테스트 환경 설정
+
+// 네이티브 모듈 모킹
+jest.mock('react-native/Libraries/Animated/NativeAnimatedHelper');
 
 // AsyncStorage 모킹
 jest.mock('@react-native-async-storage/async-storage', () => ({
