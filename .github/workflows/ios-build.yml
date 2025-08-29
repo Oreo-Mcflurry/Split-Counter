@@ -35,13 +35,17 @@ jobs:
         bundle install
         bundle exec pod install
         
+    - name: List available simulators
+      run: |
+        xcrun simctl list devices available
+        
     - name: Build iOS project
       run: |
         cd ios
         xcodebuild -workspace SplitCounter.xcworkspace \
                    -scheme SplitCounter \
                    -configuration Debug \
-                   -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+                   -destination 'platform=iOS Simulator,OS=latest' \
                    -derivedDataPath build \
                    build
                    
