@@ -9,48 +9,46 @@ on:
 jobs:
   ios-build:
     runs-on: macos-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
-        
+
     - name: Install dependencies
       run: npm ci
-      
+
     - name: Setup Ruby
       uses: ruby/setup-ruby@v1
       with:
         ruby-version: '3.0'
         bundler-cache: true
-        
+
     - name: Install CocoaPods
       run: |
         cd ios
         bundle install
         bundle exec pod install
-        
+
     - name: List available simulators
       run: |
         xcrun simctl list devices available
-        
+
     - name: Find available iOS simulator
       id: find-simulator
       run: |
-        # 사용 가능한 첫 번째 iOS 시뮬레이터 찾기
-        SIMULATOR=$(xcrun simctl list devices available | grep "iPhone" | head -1 | sed 's/.*(\([^)]*\)).*/\1/')
-        if [ -z "$SIMULATOR" ]; then
-          echo "No iPhone simulator found, using generic iOS Simulator"
-          echo "simulator=platform=iOS Simulator,OS=latest" >> $GITHUB_OUTPUT
-        else
-          echo "Found simulator: $SIMULATOR"
-          echo "simulator=platform=iOS Simulator,id=$SIMULATOR" >> $GITHUB_OUTPUT
-        fi
+        # 사용 가능한 iOS 시뮬레이터 확인
+        echo "Available simulators:"
+        xcrun simctl list devices available | grep "iPhone" || echo "No iPhone simulators found"
+        
+        # 기본적으로 platform=iOS Simulator,OS=latest 사용 (가장 안정적)
+        echo "Using default iOS Simulator destination"
+        echo "simulator=platform=iOS Simulator,OS=latest" >> $GITHUB_OUTPUT
 
     - name: List available destinations
       run: |
@@ -59,7 +57,7 @@ jobs:
                    -scheme SplitCounter \
                    -showdestinations \
                    -configuration Debug
-        
+
     - name: Build iOS project
       run: |
         cd ios
@@ -69,7 +67,7 @@ jobs:
                    -destination '${{ steps.find-simulator.outputs.simulator }}' \
                    -derivedDataPath build \
                    build
-                   
+
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       if: always()

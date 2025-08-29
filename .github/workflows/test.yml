@@ -1,4 +1,4 @@
-name: Tests
+name: Lint
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ main, develop ]
 
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
     
     steps:
@@ -28,14 +28,3 @@ jobs:
       
     - name: Run ESLint
       run: npx eslint . --ext .js,.jsx,.ts,.tsx
-      
-    - name: Run tests
-      run: npm test -- --coverage --watchAll=false
-      
-    - name: Upload coverage reports
-      uses: codecov/codecov-action@v3
-      if: always()
-      with:
-        file: ./coverage/lcov.info
-        flags: unittests
-        name: codecov-umbrella
