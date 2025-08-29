@@ -29,52 +29,112 @@ jobs:
         ruby-version: '3.0'
         bundler-cache: true
 
+    # Xcode 버전 확인
+    - name: Check Xcode version
+      run: |
+        xcodebuild -version
+        xcrun --show-sdk-version --sdk iphoneos
+        xcrun --show-sdk-version --sdk iphonesimulator
+
     - name: Install CocoaPods
       run: |
         cd ios
         bundle install
         bundle exec pod install
 
+    # 사용 가능한 시뮬레이터 목록 확인
     - name: List available simulators
       run: |
-        xcrun simctl list devices available
-
-    - name: Find available iOS simulator
-      id: find-simulator
-      run: |
-        # 사용 가능한 iOS 시뮬레이터 확인
-        echo "Available simulators:"
-        xcrun simctl list devices available | grep "iPhone" || echo "No iPhone simulators found"
-        
-        # 기본적으로 platform=iOS Simulator,OS=latest 사용 (가장 안정적)
-        echo "Using default iOS Simulator destination"
-        echo "simulator=platform=iOS Simulator,OS=latest" >> $GITHUB_OUTPUT
-
-    - name: List available destinations
-      run: |
+        echo "=== Available iOS Simulators ==="
+        xcrun simctl list devices available ios
+        echo ""
+        echo "=== Available Destinations ==="
         cd ios
         xcodebuild -workspace SplitCounter.xcworkspace \
                    -scheme SplitCounter \
                    -showdestinations \
                    -configuration Debug
 
+    # 가장 안정적인 시뮬레이터 찾기
+    - name: Find iOS simulator
+      id: find-simulator
+      run: |
+        # 사용 가능한 첫 번째 iPhone 시뮬레이터 찾기
+        SIMULATOR=$(xcrun simctl list devices available ios | grep "iPhone" | head -1 | sed 's/^[ \t]*//' | sed 's/ (.*//')
+        
+        if [ -z "$SIMULATOR" ]; then
+          echo "No iPhone simulator found, using generic iOS Simulator"
+          echo "destination=platform=iOS Simulator,OS=latest" >> $GITHUB_OUTPUT
+        else
+          echo "Found simulator: $SIMULATOR"
+          echo "destination=platform=iOS Simulator,name=$SIMULATOR,OS=latest" >> $GITHUB_OUTPUT
+        fi
+
+    # iOS 플랫폼이 없는 경우를 대비한 빌드
     - name: Build iOS project
       run: |
         cd ios
         
-        # 가장 안전한 방법: Any iOS Simulator Device 사용
-        echo "Building for Any iOS Simulator Device (most reliable)"
-        xcodebuild -workspace SplitCounter.xcworkspace \
-                   -scheme SplitCounter \
-                   -configuration Debug \
-                   -destination 'platform=iOS Simulator,name=Any iOS Simulator Device' \
-                   -derivedDataPath build \
-                   build
+        echo "=== Attempting iOS Simulator build ==="
+        
+        # 방법 1: 가장 기본적인 시뮬레이터 대상
+        if xcodebuild -workspace SplitCounter.xcworkspace \
+                      -scheme SplitCounter \
+                      -configuration Debug \
+                      -destination 'platform=iOS Simulator,OS=latest' \
+                      -derivedDataPath build \
+                      build; then
+          echo "✅ Build successful with basic iOS Simulator"
+        else
+          echo "❌ Basic iOS Simulator build failed, trying specific device..."
+          
+          # 방법 2: 특정 시뮬레이터 디바이스 사용
+          SIMULATOR=$(xcrun simctl list devices available ios | grep "iPhone" | head -1 | cut -d'(' -f1 | sed 's/^[ \t]*//;s/[ \t]*$//')
+          
+          if [ ! -z "$SIMULATOR" ]; then
+            echo "Trying with simulator: $SIMULATOR"
+            xcodebuild -workspace SplitCounter.xcworkspace \
+                       -scheme SplitCounter \
+                       -configuration Debug \
+                       -destination "platform=iOS Simulator,name=$SIMULATOR" \
+                       -derivedDataPath build \
+                       build
+          else
+            echo "❌ No suitable iOS simulator found"
+            exit 1
+          fi
+        fi
 
+    # 빌드 로그 업로드 (실패 시에도)
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: ios-build-logs
-        path: ios/build/
+        path: |
+          ios/build/
+          ios/Pods/
         retention-days: 7
+
+    # 추가: 문제 진단을 위한 정보 수집
+    - name: Diagnostic information
+      if: failure()
+      run: |
+        echo "=== System Information ==="
+        sw_vers
+        echo ""
+        echo "=== Xcode Information ==="
+        xcodebuild -version
+        echo ""
+        echo "=== Available SDKs ==="
+        xcodebuild -showsdks
+        echo ""
+        echo "=== CocoaPods Information ==="
+        cd ios
+        bundle exec pod --version
+        ls -la
+        echo ""
+        echo "=== Workspace Information ==="
+        if [ -f "SplitCounter.xcworkspace/contents.xcworkspacedata" ]; then
+          cat SplitCounter.xcworkspace/contents.xcworkspacedata
+        fi
