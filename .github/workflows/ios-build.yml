@@ -70,39 +70,46 @@ jobs:
           echo "destination=platform=iOS Simulator,name=$SIMULATOR,OS=latest" >> $GITHUB_OUTPUT
         fi
 
-    # iOS 플랫폼이 없는 경우를 대비한 빌드
+    # iOS 시뮬레이터 빌드 (OS 버전 명시)
     - name: Build iOS project
       run: |
         cd ios
         
-        echo "=== Attempting iOS Simulator build ==="
+        echo "=== Building for iOS Simulator with specific OS version ==="
         
-        # 방법 1: 가장 기본적인 시뮬레이터 대상
-        if xcodebuild -workspace SplitCounter.xcworkspace \
-                      -scheme SplitCounter \
-                      -configuration Debug \
-                      -destination 'platform=iOS Simulator,OS=latest' \
-                      -derivedDataPath build \
-                      build; then
-          echo "✅ Build successful with basic iOS Simulator"
-        else
-          echo "❌ Basic iOS Simulator build failed, trying specific device..."
+        # 사용 가능한 iOS 버전 중 하나를 선택 (18.4, 18.5, 18.6, 26.0 중에서)
+        # 가장 안정적인 버전부터 시도
+        
+        SIMULATOR_DESTINATIONS=(
+          "platform=iOS Simulator,name=iPhone 16 Pro,OS=18.4"
+          "platform=iOS Simulator,name=iPhone 16 Pro,OS=18.5" 
+          "platform=iOS Simulator,name=iPhone 16 Pro,OS=18.6"
+          "platform=iOS Simulator,name=iPhone SE (3rd generation),OS=18.4"
+          "platform=iOS Simulator,name=iPhone 16,OS=18.4"
+        )
+        
+        BUILD_SUCCESS=false
+        
+        for destination in "${SIMULATOR_DESTINATIONS[@]}"; do
+          echo "Trying destination: $destination"
           
-          # 방법 2: 특정 시뮬레이터 디바이스 사용
-          SIMULATOR=$(xcrun simctl list devices available ios | grep "iPhone" | head -1 | cut -d'(' -f1 | sed 's/^[ \t]*//;s/[ \t]*$//')
-          
-          if [ ! -z "$SIMULATOR" ]; then
-            echo "Trying with simulator: $SIMULATOR"
-            xcodebuild -workspace SplitCounter.xcworkspace \
-                       -scheme SplitCounter \
-                       -configuration Debug \
-                       -destination "platform=iOS Simulator,name=$SIMULATOR" \
-                       -derivedDataPath build \
-                       build
+          if xcodebuild -workspace SplitCounter.xcworkspace \
+                        -scheme SplitCounter \
+                        -configuration Debug \
+                        -destination "$destination" \
+                        -derivedDataPath build \
+                        build; then
+            echo "✅ Build successful with destination: $destination"
+            BUILD_SUCCESS=true
+            break
           else
-            echo "❌ No suitable iOS simulator found"
-            exit 1
+            echo "❌ Build failed with destination: $destination"
           fi
+        done
+        
+        if [ "$BUILD_SUCCESS" = false ]; then
+          echo "❌ All build attempts failed"
+          exit 1
         fi
 
     # 빌드 로그 업로드 (실패 시에도)
