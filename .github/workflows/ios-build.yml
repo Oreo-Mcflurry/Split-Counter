@@ -11,137 +11,132 @@ jobs:
     runs-on: macos-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
 
-    - name: Install dependencies
-      run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-    - name: Setup Ruby
-      uses: ruby/setup-ruby@v1
-      with:
-        ruby-version: '3.0'
-        bundler-cache: true
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.0'
+          bundler-cache: true
 
-    # Xcode 버전 확인
-    - name: Check Xcode version
-      run: |
-        xcodebuild -version
-        xcrun --show-sdk-version --sdk iphoneos
-        xcrun --show-sdk-version --sdk iphonesimulator
+      # Xcode/SDK 확인
+      - name: Check Xcode version
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun --show-sdk-version --sdk iphoneos || true
+          xcrun --show-sdk-version --sdk iphonesimulator || true
 
-    - name: Install CocoaPods
-      run: |
-        cd ios
-        bundle install
-        bundle exec pod install
+      - name: Install CocoaPods
+        run: |
+          set -euo pipefail
+          cd ios
+          bundle install
+          bundle exec pod install --repo-update
 
-    # 사용 가능한 시뮬레이터 목록 확인
-    - name: List available simulators
-      run: |
-        echo "=== Available iOS Simulators ==="
-        xcrun simctl list devices available ios
-        echo ""
-        echo "=== Available Destinations ==="
-        cd ios
-        xcodebuild -workspace SplitCounter.xcworkspace \
-                   -scheme SplitCounter \
-                   -showdestinations \
-                   -configuration Debug
+      # 시뮬레이터/목표지 확인(선택)
+      - name: List available simulators and destinations
+        run: |
+          set -euo pipefail
+          echo "=== Available iOS Simulators ==="
+          xcrun simctl list devices available ios || true
+          echo ""
+          echo "=== Available Destinations ==="
+          cd ios
+          xcodebuild -workspace SplitCounter.xcworkspace \
+                     -scheme SplitCounter \
+                     -showdestinations \
+                     -configuration Debug || true
 
-    # 가장 안정적인 시뮬레이터 찾기
-    - name: Find iOS simulator
-      id: find-simulator
-      run: |
-        # 사용 가능한 첫 번째 iPhone 시뮬레이터 찾기
-        SIMULATOR=$(xcrun simctl list devices available ios | grep "iPhone" | head -1 | sed 's/^[ \t]*//' | sed 's/ (.*//')
-        
-        if [ -z "$SIMULATOR" ]; then
-          echo "No iPhone simulator found, using generic iOS Simulator"
-          echo "destination=platform=iOS Simulator,OS=latest" >> $GITHUB_OUTPUT
-        else
-          echo "Found simulator: $SIMULATOR"
-          echo "destination=platform=iOS Simulator,name=$SIMULATOR,OS=latest" >> $GITHUB_OUTPUT
-        fi
+      - name: Install xcpretty
+        run: |
+          set -euo pipefail
+          gem install xcpretty --no-document
 
-    # iOS 시뮬레이터 빌드 (OS 버전 명시)
-    - name: Build iOS project
-      run: |
-        cd ios
-        
-        echo "=== Building for iOS Simulator with specific OS version ==="
-        
-        # 사용 가능한 iOS 버전 중 하나를 선택 (18.4, 18.5, 18.6, 26.0 중에서)
-        # 가장 안정적인 버전부터 시도
-        
-        SIMULATOR_DESTINATIONS=(
-          "platform=iOS Simulator,name=iPhone 16 Pro,OS=18.4"
-          "platform=iOS Simulator,name=iPhone 16 Pro,OS=18.5" 
-          "platform=iOS Simulator,name=iPhone 16 Pro,OS=18.6"
-          "platform=iOS Simulator,name=iPhone SE (3rd generation),OS=18.4"
-          "platform=iOS Simulator,name=iPhone 16,OS=18.4"
-        )
-        
-        BUILD_SUCCESS=false
-        
-        for destination in "${SIMULATOR_DESTINATIONS[@]}"; do
-          echo "Trying destination: $destination"
-          
-          if xcodebuild -workspace SplitCounter.xcworkspace \
-                        -scheme SplitCounter \
-                        -configuration Debug \
-                        -destination "$destination" \
-                        -derivedDataPath build \
-                        build; then
-            echo "✅ Build successful with destination: $destination"
-            BUILD_SUCCESS=true
-            break
-          else
-            echo "❌ Build failed with destination: $destination"
+      # UDID 기반으로 시뮬레이터 선택/부팅
+      - name: Pick and boot iOS Simulator (by UDID)
+        id: boot-sim
+        run: |
+          set -euo pipefail
+
+          echo "=== iOS runtimes ==="
+          xcrun simctl list runtimes | sed -n '/iOS/,$p' || true
+
+          echo "=== Pick first available iPhone device ==="
+          LINE=$(xcrun simctl list devices available | awk '/iOS/{in_ios=1} in_ios && /iPhone/ {print; exit}')
+          if [ -z "${LINE:-}" ]; then
+            echo "No iPhone simulator found"
+            exit 1
           fi
-        done
-        
-        if [ "$BUILD_SUCCESS" = false ]; then
-          echo "❌ All build attempts failed"
-          exit 1
-        fi
 
-    # 빌드 로그 업로드 (실패 시에도)
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: ios-build-logs
-        path: |
-          ios/build/
-          ios/Pods/
-        retention-days: 7
+          # 예: "iPhone 16 Pro (B8F5...8904F) (Shutdown)"
+          UDID=$(echo "$LINE" | sed -n 's/.*(\([0-9A-F-]\{36\}\)).*/\1/p')
+          NAME=$(echo "$LINE" | sed -E 's/ \([0-9A-F-]+\) \(.+\)$//')
 
-    # 추가: 문제 진단을 위한 정보 수집
-    - name: Diagnostic information
-      if: failure()
-      run: |
-        echo "=== System Information ==="
-        sw_vers
-        echo ""
-        echo "=== Xcode Information ==="
-        xcodebuild -version
-        echo ""
-        echo "=== Available SDKs ==="
-        xcodebuild -showsdks
-        echo ""
-        echo "=== CocoaPods Information ==="
-        cd ios
-        bundle exec pod --version
-        ls -la
-        echo ""
-        echo "=== Workspace Information ==="
-        if [ -f "SplitCounter.xcworkspace/contents.xcworkspacedata" ]; then
-          cat SplitCounter.xcworkspace/contents.xcworkspacedata
-        fi
+          echo "Picked: $NAME ($UDID)"
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+          # 부팅
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b -d 120
+          # 깨끗한 상태로
+          xcrun simctl erase "$UDID" || true
+
+      # iphonesimulator SDK + UDID로 빌드
+      - name: Build iOS project (iphonesimulator)
+        run: |
+          set -euo pipefail
+          cd ios
+          xcodebuild \
+            -workspace SplitCounter.xcworkspace \
+            -scheme SplitCounter \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "id=${{ steps.boot-sim.outputs.udid }}" \
+            -derivedDataPath build \
+            build | xcpretty && exit ${PIPESTATUS[0]}
+
+      # 빌드 산출물/로그 업로드
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-build-logs
+          path: |
+            ios/build/
+            ios/Pods/
+          retention-days: 7
+
+      # 실패 시 진단 정보
+      - name: Diagnostic information
+        if: failure()
+        run: |
+          set -euo pipefail
+          echo "=== System Information ==="
+          sw_vers || true
+          echo ""
+          echo "=== Xcode Information ==="
+          xcodebuild -version || true
+          echo ""
+          echo "=== Available SDKs ==="
+          xcodebuild -showsdks || true
+          echo ""
+          echo "=== CocoaPods Information ==="
+          cd ios
+          bundle exec pod --version || true
+          ls -la || true
+          echo ""
+          echo "=== Workspace Information ==="
+          if [ -f "SplitCounter.xcworkspace/contents.xcworkspacedata" ]; then
+            cat SplitCounter.xcworkspacedata
+          fi
