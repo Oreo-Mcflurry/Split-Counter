@@ -18,8 +18,6 @@ jest.mock('react-native-haptic-feedback', () => ({
   trigger: jest.fn(),
 }));
 
-jest.mock('react-native-sound', () => jest.fn());
-
 test('renders correctly', () => {
   const tree = ReactTestRenderer.create(<App />);
   expect(tree).toBeTruthy();

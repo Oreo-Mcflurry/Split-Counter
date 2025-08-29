@@ -39,6 +39,14 @@ jobs:
       run: |
         xcrun simctl list devices available
         
+    - name: List available destinations
+      run: |
+        cd ios
+        xcodebuild -workspace SplitCounter.xcworkspace \
+                   -scheme SplitCounter \
+                   -showdestinations \
+                   -configuration Debug
+        
     - name: Build iOS project
       run: |
         cd ios
