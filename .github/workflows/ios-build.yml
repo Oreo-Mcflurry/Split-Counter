@@ -9,6 +9,7 @@ on:
 jobs:
   ios-build:
     runs-on: macos-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout code
@@ -29,13 +30,12 @@ jobs:
           ruby-version: '3.0'
           bundler-cache: true
 
-      # Xcode/SDK 확인
-      - name: Check Xcode version
+      - name: Check Xcode and SDKs
         run: |
           set -euo pipefail
           xcodebuild -version
-          xcrun --show-sdk-version --sdk iphoneos || true
-          xcrun --show-sdk-version --sdk iphonesimulator || true
+          xcrun simctl list runtimes
+          xcrun simctl list devicetypes | sed -n '1,120p'
 
       - name: Install CocoaPods
         run: |
@@ -44,55 +44,99 @@ jobs:
           bundle install
           bundle exec pod install --repo-update
 
-      # 시뮬레이터/목표지 확인(선택)
-      - name: List available simulators and destinations
+      - name: Install xcpretty
         run: |
           set -euo pipefail
-          echo "=== Available iOS Simulators ==="
-          xcrun simctl list devices available ios || true
-          echo ""
-          echo "=== Available Destinations ==="
+          gem install xcpretty --no-document
+
+      # 문제 회피: "Data Migration / Gathering plugins"에 걸리는 기존 기기 대신
+      # 매 빌드마다 깨끗한 임시 시뮬레이터를 생성해 사용
+      - name: Create and boot fresh iOS Simulator
+        id: sim
+        run: |
+          set -euo pipefail
+
+          echo "=== Prefer stable iOS runtimes (18.5 -> 18.6 -> 18.4) ==="
+          RUNTIMES=(
+            "com.apple.CoreSimulator.SimRuntime.iOS-18-5"
+            "com.apple.CoreSimulator.SimRuntime.iOS-18-6"
+            "com.apple.CoreSimulator.SimRuntime.iOS-18-4"
+          )
+
+          echo "=== Pick an iPhone device type (prefer iPhone 16 Pro -> 16 -> SE 3rd) ==="
+          # devicetype identifier 예: com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro
+          TYPE_16_PRO=$(xcrun simctl list devicetypes | awk -F '[()]' '/iPhone 16 Pro/{print $2; exit}' || true)
+          TYPE_16=$(xcrun simctl list devicetypes | awk -F '[()]' '/iPhone 16$/{print $2; exit}' || true)
+          TYPE_SE3=$(xcrun simctl list devicetypes | awk -F '[()]' '/iPhone SE \(3rd generation\)/{print $2; exit}' || true)
+
+          if [ -n "${TYPE_16_PRO:-}" ]; then
+            DEVTYPE="$TYPE_16_PRO"
+            DEVNAME="CI iPhone 16 Pro"
+          elif [ -n "${TYPE_16:-}" ]; then
+            DEVTYPE="$TYPE_16"
+            DEVNAME="CI iPhone 16"
+          elif [ -n "${TYPE_SE3:-}" ]; then
+            DEVTYPE="$TYPE_SE3"
+            DEVNAME="CI iPhone SE (3rd)"
+          else
+            echo "No suitable iPhone devicetype found"
+            exit 1
+          fi
+
+          echo "Using device type: $DEVTYPE"
+
+          PICKED_RT=""
+          for RT in "${RUNTIMES[@]}"; do
+            if xcrun simctl list runtimes | grep -q "$RT"; then
+              PICKED_RT="$RT"
+              break
+            fi
+          done
+
+          if [ -z "$PICKED_RT" ]; then
+            echo "No preferred iOS 18.x runtime found. As last resort try iOS 26.0 (beta)."
+            if xcrun simctl list runtimes | grep -q "com.apple.CoreSimulator.SimRuntime.iOS-26-0"; then
+              PICKED_RT="com.apple.CoreSimulator.SimRuntime.iOS-26-0"
+            else
+              echo "No usable iOS runtime present."
+              exit 1
+            fi
+          fi
+
+          echo "Picked runtime: $PICKED_RT"
+
+          # 임시 기기 생성
+          UDID=$(xcrun simctl create "$DEVNAME" "$DEVTYPE" "$PICKED_RT")
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          echo "runtime=$PICKED_RT" >> "$GITHUB_OUTPUT"
+
+          # 종료 훅에서 정리할 수 있도록 기록
+          echo "$UDID" > /tmp/created-sim-udid
+
+          # 부팅 및 초기화
+          xcrun simctl boot "$UDID" || true
+          # 부팅 완료 대기(최대 3분)
+          xcrun simctl bootstatus "$UDID" -b -d 180
+          # 깨끗한 상태 보장
+          xcrun simctl erase "$UDID" || true
+          # 재부팅 후 상태 확인
+          xcrun simctl shutdown "$UDID" || true
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b -d 120
+
+          # 주요 정보 출력
+          xcrun simctl getenv "$UDID" SIMULATOR_RUNTIME_VERSION || true
+          xcrun simctl getenv "$UDID" SIMULATOR_DEVICE_NAME || true
+
+      - name: Show destinations (optional)
+        run: |
+          set -euo pipefail
           cd ios
           xcodebuild -workspace SplitCounter.xcworkspace \
                      -scheme SplitCounter \
                      -showdestinations \
                      -configuration Debug || true
 
-      - name: Install xcpretty
-        run: |
-          set -euo pipefail
-          gem install xcpretty --no-document
-
-      # UDID 기반으로 시뮬레이터 선택/부팅
-      - name: Pick and boot iOS Simulator (by UDID)
-        id: boot-sim
-        run: |
-          set -euo pipefail
-
-          echo "=== iOS runtimes ==="
-          xcrun simctl list runtimes | sed -n '/iOS/,$p' || true
-
-          echo "=== Pick first available iPhone device ==="
-          LINE=$(xcrun simctl list devices available | awk '/iOS/{in_ios=1} in_ios && /iPhone/ {print; exit}')
-          if [ -z "${LINE:-}" ]; then
-            echo "No iPhone simulator found"
-            exit 1
-          fi
-
-          # 예: "iPhone 16 Pro (B8F5...8904F) (Shutdown)"
-          UDID=$(echo "$LINE" | sed -n 's/.*(\([0-9A-F-]\{36\}\)).*/\1/p')
-          NAME=$(echo "$LINE" | sed -E 's/ \([0-9A-F-]+\) \(.+\)$//')
-
-          echo "Picked: $NAME ($UDID)"
-          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
-
-          # 부팅
-          xcrun simctl boot "$UDID" || true
-          xcrun simctl bootstatus "$UDID" -b -d 120
-          # 깨끗한 상태로
-          xcrun simctl erase "$UDID" || true
-
-      # iphonesimulator SDK + UDID로 빌드
       - name: Build iOS project (iphonesimulator)
         run: |
           set -euo pipefail
@@ -102,11 +146,10 @@ jobs:
             -scheme SplitCounter \
             -configuration Debug \
             -sdk iphonesimulator \
-            -destination "id=${{ steps.boot-sim.outputs.udid }}" \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
             -derivedDataPath build \
             build | xcpretty && exit ${PIPESTATUS[0]}
 
-      # 빌드 산출물/로그 업로드
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         if: always()
@@ -117,8 +160,17 @@ jobs:
             ios/Pods/
           retention-days: 7
 
-      # 실패 시 진단 정보
-      - name: Diagnostic information
+      - name: Cleanup Simulator
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -f /tmp/created-sim-udid ]; then
+            UDID=$(cat /tmp/created-sim-udid)
+            xcrun simctl shutdown "$UDID" || true
+            xcrun simctl delete "$UDID" || true
+          fi
+
+      - name: Diagnostics on failure
         if: failure()
         run: |
           set -euo pipefail
@@ -131,12 +183,18 @@ jobs:
           echo "=== Available SDKs ==="
           xcodebuild -showsdks || true
           echo ""
+          echo "=== Runtimes ==="
+          xcrun simctl list runtimes || true
+          echo ""
+          echo "=== Devices (available) ==="
+          xcrun simctl list devices available || true
+          echo ""
           echo "=== CocoaPods Information ==="
           cd ios
           bundle exec pod --version || true
           ls -la || true
-          echo ""
-          echo "=== Workspace Information ==="
           if [ -f "SplitCounter.xcworkspace/contents.xcworkspacedata" ]; then
-            cat SplitCounter.xcworkspacedata
+            echo ""
+            echo "=== Workspace ==="
+            cat SplitCounter.xcworkspace/contents.xcworkspacedata
           fi
