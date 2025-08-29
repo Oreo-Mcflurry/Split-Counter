@@ -44,6 +44,28 @@ npx react-native run-ios
 npx react-native run-android
 ```
 
+## 🧪 테스트 및 품질 관리
+
+```bash
+# TypeScript 타입 체크
+npx tsc --noEmit
+
+# ESLint 실행
+npm run lint
+
+# 테스트 실행
+npm test
+```
+
+## 🔄 CI/CD 파이프라인
+
+GitHub Actions를 통해 자동화된 빌드 및 테스트를 수행합니다:
+
+- **iOS 빌드**: macOS 환경에서 iOS 시뮬레이터 빌드
+- **Android 빌드**: Ubuntu 환경에서 APK 및 Bundle 생성
+- **테스트**: TypeScript 체크, ESLint, Jest 테스트 실행
+- **코드 품질**: 자동화된 코드 검사 및 테스트 커버리지
+
 ## 📚 학습 목표
 
 - React Native 기본 개념
@@ -51,5 +73,8 @@ npx react-native run-android
 - Reducer 패턴 상태 관리
 - 터치 이벤트 처리
 - TypeScript 활용
+- CI/CD 파이프라인 구축
 
 ---
+
+**Claude Code + Cursor + 바이브코딩 = 🎯 코딩 실력 향상!**
