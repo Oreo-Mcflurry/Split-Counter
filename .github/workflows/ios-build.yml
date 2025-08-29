@@ -61,10 +61,13 @@ jobs:
     - name: Build iOS project
       run: |
         cd ios
+        
+        # 가장 안전한 방법: Any iOS Simulator Device 사용
+        echo "Building for Any iOS Simulator Device (most reliable)"
         xcodebuild -workspace SplitCounter.xcworkspace \
                    -scheme SplitCounter \
                    -configuration Debug \
-                   -destination '${{ steps.find-simulator.outputs.simulator }}' \
+                   -destination 'platform=iOS Simulator,name=Any iOS Simulator Device' \
                    -derivedDataPath build \
                    build
 
