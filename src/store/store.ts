@@ -26,6 +26,9 @@ const counterReducer = (state: AppState, action: CounterAction): AppState => {
     case 'RESET_SECTION':
       return counterUseCases.resetSection(state, action.payload.sectionId);
 
+    case 'RESET_ALL_SECTIONS':
+      return counterUseCases.resetAllSections(state);
+
     case 'UPDATE_SECTION':
       return counterUseCases.updateSection(state, action.payload);
 

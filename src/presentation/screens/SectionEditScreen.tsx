@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -9,21 +9,23 @@ import {
   SafeAreaView,
   Alert,
 } from 'react-native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Section, CounterAction } from '../../core/types';
 import { useAppDispatch } from '../../store/hooks';
 import { COLORS } from '../../core/constants';
+import { RootStackParamList } from '../navigation/AppNavigator';
+import { useColorScheme } from '../../hooks/useColorScheme';
 
-type Props = {
-  section: Section;
-  onClose: () => void;
-};
+type SectionEditRouteProp = RouteProp<RootStackParamList, 'SectionEdit'>;
 
-const SectionEditScreen: React.FC<Props> = ({ section, onClose }) => {
+const SectionEditScreen: React.FC = () => {
+  const navigation = useNavigation();
+  const route = useRoute<SectionEditRouteProp>();
+  const { section } = route.params;
   const dispatch = useAppDispatch();
   const [title, setTitle] = useState(section.title);
   const [selectedColor, setSelectedColor] = useState(section.color);
-  const [sound, setSound] = useState(section.sound);
-  const [haptic, setHaptic] = useState(section.haptic);
+  const { colors } = useColorScheme();
 
   const handleSave = useCallback(() => {
     if (!title.trim()) {
@@ -35,8 +37,6 @@ const SectionEditScreen: React.FC<Props> = ({ section, onClose }) => {
       ...section,
       title: title.trim(),
       color: selectedColor,
-      sound,
-      haptic,
     };
 
     const action: CounterAction = {
@@ -45,29 +45,24 @@ const SectionEditScreen: React.FC<Props> = ({ section, onClose }) => {
     };
 
     dispatch(action);
-    onClose();
-  }, [dispatch, section, title, selectedColor, sound, haptic, onClose]);
+    navigation.goBack();
+  }, [dispatch, section, title, selectedColor, navigation]);
 
-  const handleReset = useCallback(() => {
-    Alert.alert(
-      '카운터 초기화',
-      `${section.title}의 카운터를 0으로 초기화하시겠습니까?`,
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '초기화',
-          style: 'destructive',
-          onPress: () => {
-            const action: CounterAction = {
-              type: 'RESET_SECTION',
-              payload: { sectionId: section.id },
-            };
-            dispatch(action);
-          },
-        },
-      ]
-    );
-  }, [dispatch, section]);
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={{ color: '#007AFF', fontSize: 17 }}>취소</Text>
+        </TouchableOpacity>
+      ),
+      headerRight: () => (
+        <TouchableOpacity onPress={handleSave}>
+          <Text style={{ color: colors.ACCENT, fontSize: 17, fontWeight: '600' }}>저장</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, handleSave]);
+
 
   const renderColorOption = (color: string, _index: number) => (
     <TouchableOpacity
@@ -75,26 +70,50 @@ const SectionEditScreen: React.FC<Props> = ({ section, onClose }) => {
       style={[
         styles.colorOption,
         { backgroundColor: color },
-        selectedColor === color && styles.selectedColorOption,
+        selectedColor === color && dynamicStyles.selectedColorOption,
       ]}
       onPress={() => setSelectedColor(color)}
     />
   );
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onClose}>
-            <Text style={styles.cancelButton}>취소</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>섹션 편집</Text>
-          <TouchableOpacity onPress={handleSave}>
-            <Text style={styles.saveButton}>저장</Text>
-          </TouchableOpacity>
-        </View>
+  const dynamicStyles = {
+    container: {
+      ...styles.container,
+      backgroundColor: colors.SURFACE,
+    },
+    scrollView: {
+      ...styles.scrollView,
+      backgroundColor: colors.SURFACE,
+    },
+    preview: {
+      ...styles.preview,
+      backgroundColor: colors.CARD_BACKGROUND,
+    },
+    section: {
+      ...styles.section,
+      backgroundColor: colors.CARD_BACKGROUND,
+    },
+    sectionTitle: {
+      ...styles.sectionTitle,
+      color: colors.TEXT,
+    },
+    titleInput: {
+      ...styles.titleInput,
+      backgroundColor: colors.SURFACE,
+      borderColor: colors.BORDER,
+      color: colors.TEXT,
+    },
+    selectedColorOption: {
+      ...styles.selectedColorOption,
+      borderColor: colors.TEXT,
+    },
+  };
 
-        <View style={styles.preview}>
+  return (
+    <SafeAreaView style={dynamicStyles.container}>
+      <ScrollView style={dynamicStyles.scrollView} showsVerticalScrollIndicator={false}>
+
+        <View style={dynamicStyles.preview}>
           <View style={[styles.previewItem, { backgroundColor: selectedColor }]}>
             <Text style={styles.previewTitle} numberOfLines={1}>
               {title || '제목 없음'}
@@ -103,70 +122,28 @@ const SectionEditScreen: React.FC<Props> = ({ section, onClose }) => {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>제목</Text>
+        <View style={dynamicStyles.section}>
+          <Text style={dynamicStyles.sectionTitle}>제목</Text>
           <TextInput
-            style={styles.titleInput}
+            style={dynamicStyles.titleInput}
             value={title}
             onChangeText={setTitle}
             placeholder="섹션 제목을 입력하세요"
+            placeholderTextColor={colors.TEXT_SECONDARY}
             maxLength={20}
             returnKeyType="done"
             blurOnSubmit
           />
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>색상</Text>
+        <View style={dynamicStyles.section}>
+          <Text style={dynamicStyles.sectionTitle}>색상</Text>
           <View style={styles.colorContainer}>
             {COLORS.map(renderColorOption)}
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>옵션</Text>
 
-          <TouchableOpacity
-            style={styles.optionRow}
-            onPress={() => setSound(!sound)}
-          >
-            <Text style={styles.optionLabel}>사운드</Text>
-            <View style={[
-              styles.toggle,
-              sound && styles.toggleActive,
-            ]}>
-              <Text style={[styles.toggleText, sound && styles.toggleTextActive]}>
-                {sound ? 'ON' : 'OFF'}
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.optionRow}
-            onPress={() => setHaptic(!haptic)}
-          >
-            <Text style={styles.optionLabel}>햅틱</Text>
-            <View style={[
-              styles.toggle,
-              haptic && styles.toggleActive,
-            ]}>
-              <Text style={[styles.toggleText, haptic && styles.toggleTextActive]}>
-                {haptic ? 'ON' : 'OFF'}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>카운터 관리</Text>
-
-          <TouchableOpacity
-            style={styles.resetButton}
-            onPress={handleReset}
-          >
-            <Text style={styles.resetButtonText}>카운터 초기화</Text>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -179,29 +156,6 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  cancelButton: {
-    fontSize: 16,
-    color: '#666',
-  },
-  saveButton: {
-    fontSize: 16,
-    color: '#007AFF',
-    fontWeight: '600',
   },
   preview: {
     padding: 20,
@@ -262,60 +216,18 @@ const styles = StyleSheet.create({
   colorContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
   },
   colorOption: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    margin: 4,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    margin: 3,
     borderWidth: 3,
     borderColor: 'transparent',
   },
   selectedColorOption: {
     borderColor: '#333',
-  },
-  optionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  optionLabel: {
-    fontSize: 16,
-    color: '#333',
-  },
-  toggle: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    minWidth: 50,
-    alignItems: 'center',
-  },
-  toggleActive: {
-    backgroundColor: '#007AFF',
-  },
-  toggleText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#666',
-  },
-  toggleTextActive: {
-    color: 'white',
-  },
-  resetButton: {
-    backgroundColor: '#FF3B30',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  resetButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
   },
 });
 

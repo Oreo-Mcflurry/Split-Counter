@@ -29,6 +29,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       launchOptions: launchOptions
     )
 
+    // RNSplashScreen.show() - Will be handled by LaunchScreen.storyboard
+    
     return true
   }
 }

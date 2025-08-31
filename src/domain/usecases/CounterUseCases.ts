@@ -40,6 +40,11 @@ export class CounterUseCases {
     return { ...state, sections };
   }
 
+  resetAllSections(state: AppState): AppState {
+    const sections = state.sections.map(section => ({ ...section, count: 0 }));
+    return { ...state, sections };
+  }
+
   updateSection(state: AppState, updatedSection: Section): AppState {
     const sections = state.sections.map(section =>
       section.id === updatedSection.id ? updatedSection : section

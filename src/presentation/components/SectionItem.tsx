@@ -5,10 +5,10 @@ import {
   TouchableOpacity,
   Alert,
   StyleSheet,
-  GestureResponderEvent,
 } from 'react-native';
+import Icon from '@react-native-vector-icons/ionicons';
 import { Section } from '../../core/types';
-import { useAppDispatch } from '../../store/hooks';
+import { useAppDispatch, useSettings } from '../../store/hooks';
 import {
   createIncrementAction,
   createDecrementAction,
@@ -22,37 +22,27 @@ type Props = {
   onLongPress?: (section: Section) => void;
 };
 
-// lastTap을 모듈 스코프에 저장
-let lastTap = 0;
 
 const SectionItem: React.FC<Props> = memo(({ section, onLongPress }) => {
   const dispatch = useAppDispatch();
+  const settings = useSettings();
 
   const handleTap = useCallback(() => {
     dispatch(createIncrementAction(section.id));
 
     // 사운드 및 햅틱 처리
-    if (section.sound) {
+    if (settings.defaultSound && (section.count + 1) % settings.soundInterval === 0) {
       playTapSound();
     }
-    if (section.haptic) {
+    if (settings.defaultHaptic && (section.count + 1) % settings.hapticInterval === 0) {
       triggerHaptic('light');
     }
-  }, [dispatch, section.id, section.sound, section.haptic]);
+  }, [dispatch, section.id, section.count, settings.defaultSound, settings.defaultHaptic, settings.soundInterval, settings.hapticInterval]);
 
   const handleLongPress = useCallback(() => {
-    dispatch(createDecrementAction(section.id));
-
-    // 햅틱 처리
-    if (section.haptic) {
-      triggerHaptic('medium');
-    }
-  }, [dispatch, section.id, section.haptic]);
-
-  const handleDoubleTap = useCallback(() => {
     Alert.alert(
       '초기화 확인',
-      `${section.title}를 0으로 초기화하시겠습니까?`,
+      `해당 카운터를 초기화하시겠습니까?`,
       [
         { text: '취소', style: 'cancel' },
         {
@@ -64,25 +54,9 @@ const SectionItem: React.FC<Props> = memo(({ section, onLongPress }) => {
     );
   }, [dispatch, section.id, section.title]);
 
-  const handlePress = useCallback(
-    (_event: GestureResponderEvent) => {
-      const now = Date.now();
-      const DOUBLE_PRESS_DELAY = 300;
-
-      if (lastTap && (now - lastTap) < DOUBLE_PRESS_DELAY) {
-        handleDoubleTap();
-        lastTap = 0;
-      } else {
-        lastTap = now;
-        setTimeout(() => {
-          if (lastTap === now) {
-            handleTap();
-          }
-        }, DOUBLE_PRESS_DELAY);
-      }
-    },
-    [handleTap, handleDoubleTap]
-  );
+  const handlePress = useCallback(() => {
+    handleTap();
+  }, [handleTap]);
 
   const handleSectionLongPress = useCallback(() => {
     onLongPress?.(section);
@@ -93,10 +67,10 @@ const SectionItem: React.FC<Props> = memo(({ section, onLongPress }) => {
       style={[styles.container, { backgroundColor: section.color }]}
       onPress={handlePress}
       onLongPress={handleLongPress}
-      activeOpacity={0.8}
+      activeOpacity={0.6}
       accessibilityLabel={`${section.title} 카운트 ${section.count}`}
       accessibilityRole="button"
-      accessibilityHint="탭하여 증가, 길게 눌러 감소, 더블탭으로 초기화"
+      accessibilityHint="탭하여 증가, 길게 눌러 초기화"
     >
       <View style={styles.content}>
         <Text style={styles.title} numberOfLines={1}>
@@ -108,7 +82,7 @@ const SectionItem: React.FC<Props> = memo(({ section, onLongPress }) => {
           onPress={handleSectionLongPress}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Text style={styles.settingsIcon}>⚙️</Text>
+          <Icon name="ellipsis-horizontal" size={16} color="white" style={styles.settingsIcon} />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>

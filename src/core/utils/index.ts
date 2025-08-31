@@ -18,10 +18,15 @@ export const createInitialState = (): AppState => ({
     sectionsCount: APP_CONFIG.DEFAULT_SECTION_COUNT,
     defaultSound: APP_CONFIG.DEFAULT_SOUND,
     defaultHaptic: APP_CONFIG.DEFAULT_HAPTIC,
+    soundInterval: APP_CONFIG.DEFAULT_SOUND_INTERVAL,
+    hapticInterval: APP_CONFIG.DEFAULT_HAPTIC_INTERVAL,
   },
 });
 
 export const getGridColumns = (sectionsCount: number): number => {
+  if (sectionsCount >= 5) {
+    return 2; // 5개 이상일 때는 2열로 고정
+  }
   return Math.ceil(Math.sqrt(sectionsCount));
 };
 
