@@ -1,8 +1,23 @@
-let tapSound: any = null;
+import { Player } from '@react-native-community/audio-toolkit';
+import { Platform } from 'react-native';
+
+let ringSound: Player | null = null;
 
 export const initializeSound = () => {
   try {
-    console.log('Sound system initialized');
+    // Load the ring.mp3 file
+    ringSound = new Player('ring.mp3', {
+      autoDestroy: false,
+      continuesToPlayInBackground: false,
+    });
+    
+    ringSound.prepare((err) => {
+      if (err) {
+        console.log('Failed to load ring sound:', err);
+      } else {
+        console.log('Ring sound loaded successfully');
+      }
+    });
   } catch (error) {
     console.log('Sound initialization error:', error);
   }
@@ -10,16 +25,14 @@ export const initializeSound = () => {
 
 export const playTapSound = () => {
   try {
-    // React Native의 기본 시스템 사운드 사용
-    const { Platform } = require('react-native');
-    
-    if (Platform.OS === 'ios') {
-      // iOS에서는 시스템 사운드를 재생하기 위해 네이티브 모듈 사용
-      // 실제 사운드는 나중에 추가할 수 있음
-      console.log('Playing iOS tap sound');
-    } else {
-      // Android에서는 시스템 클릭 사운드
-      console.log('Playing Android tap sound');
+    if (ringSound && ringSound.canPlay) {
+      // 재생 위치를 처음으로 되돌리고 재생
+      ringSound.seek(0);
+      ringSound.play((err) => {
+        if (err) {
+          console.log('Ring sound playback failed:', err);
+        }
+      });
     }
   } catch (error) {
     console.log('Sound playback failed:', error);
@@ -27,8 +40,8 @@ export const playTapSound = () => {
 };
 
 export const releaseSound = () => {
-  if (tapSound) {
-    tapSound.release();
-    tapSound = null;
+  if (ringSound) {
+    ringSound.destroy();
+    ringSound = null;
   }
 };

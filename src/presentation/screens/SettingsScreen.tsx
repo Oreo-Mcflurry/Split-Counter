@@ -270,7 +270,7 @@ const SettingsScreen: React.FC = () => {
             ]}
           >
             <View style={styles.intervalRow}>
-              <Text style={dynamicStyles.intervalLabel}>몇 개마다 사운드</Text>
+              <Text style={dynamicStyles.intervalLabel}>소리 알림 간격</Text>
               <View style={dynamicStyles.stepper}>
                 <TouchableOpacity
                   style={[dynamicStyles.stepperButton, dynamicStyles.stepperButtonLeft]}
@@ -338,7 +338,7 @@ const SettingsScreen: React.FC = () => {
             ]}
           >
             <View style={styles.intervalRow}>
-              <Text style={dynamicStyles.intervalLabel}>몇 개마다 햅틱</Text>
+              <Text style={dynamicStyles.intervalLabel}>햅틱 알림 간격</Text>
               <View style={dynamicStyles.stepper}>
                 <TouchableOpacity
                   style={[dynamicStyles.stepperButton, dynamicStyles.stepperButtonLeft]}

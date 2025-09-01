@@ -28,13 +28,15 @@ const SectionItem: React.FC<Props> = memo(({ section, onLongPress }) => {
   const settings = useSettings();
 
   const handleTap = useCallback(() => {
+    const nextCount = section.count + 1;
     dispatch(createIncrementAction(section.id));
 
     // 사운드 및 햅틱 처리
-    if (settings.defaultSound && (section.count + 1) % settings.soundInterval === 0) {
+    const shouldPlaySound = settings.soundInterval === 1 || nextCount % settings.soundInterval === 0;
+    if (settings.defaultSound && shouldPlaySound) {
       playTapSound();
     }
-    if (settings.defaultHaptic && (section.count + 1) % settings.hapticInterval === 0) {
+    if (settings.defaultHaptic && (nextCount % settings.hapticInterval === 0)) {
       triggerHaptic('light');
     }
   }, [dispatch, section.id, section.count, settings.defaultSound, settings.defaultHaptic, settings.soundInterval, settings.hapticInterval]);
